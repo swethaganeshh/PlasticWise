@@ -1,72 +1,35 @@
 import * as tf from '@tensorflow/tfjs';
-import * as mobilenet from '@tensorflow-models/mobilenet';
 import { PlasticType } from '../types';
 
 class ModelService {
-  private model: mobilenet.MobileNet | null = null;
+  private model: tf.LayersModel | null = null;
   private readonly IMAGE_SIZE = 224;
-  private readonly CONFIDENCE_THRESHOLD = 0.5;
+  private readonly MODEL_URL = 'https://storage.googleapis.com/tfjs-models/plastics/model.json';
+  private readonly CONFIDENCE_THRESHOLD = 0.7;
 
-  // Enhanced plastic signatures with more detailed characteristics
-  private readonly PLASTIC_SIGNATURES = {
-    [PlasticType.PET]: {
-      keywords: ['bottle', 'water bottle', 'plastic bottle', 'beverage', 'container', 'transparent', 'clear'],
-      visualCharacteristics: {
-        transparency: 'high',
-        texture: 'smooth',
-        common_shapes: ['cylindrical', 'bottle'],
-        typical_uses: ['beverages', 'food containers']
-      },
-      confidence: 0.7
-    },
-    [PlasticType.HDPE]: {
-      keywords: ['milk jug', 'detergent', 'bottle', 'container', 'jug', 'opaque', 'white'],
-      visualCharacteristics: {
-        transparency: 'low',
-        texture: 'matte',
-        common_shapes: ['jug', 'bottle', 'container'],
-        typical_uses: ['milk', 'detergent', 'shampoo']
-      },
-      confidence: 0.7
-    },
-    [PlasticType.PVC]: {
-      keywords: ['pipe', 'tubing', 'window', 'frame', 'rigid', 'construction'],
-      visualCharacteristics: {
-        transparency: 'low',
-        texture: 'rigid',
-        common_shapes: ['pipe', 'frame', 'sheet'],
-        typical_uses: ['construction', 'plumbing']
-      },
-      confidence: 0.7
-    },
-    [PlasticType.LDPE]: {
-      keywords: ['bag', 'film', 'wrap', 'flexible', 'soft', 'squeeze'],
-      visualCharacteristics: {
-        transparency: 'medium',
-        texture: 'flexible',
-        common_shapes: ['film', 'bag', 'flexible container'],
-        typical_uses: ['bags', 'wraps', 'squeeze bottles']
-      },
-      confidence: 0.7
-    },
-    [PlasticType.PP]: {
-      keywords: ['container', 'tupperware', 'cap', 'lid', 'food container'],
-      visualCharacteristics: {
-        transparency: 'medium',
-        texture: 'smooth',
-        common_shapes: ['container', 'cap', 'tub'],
-        typical_uses: ['food storage', 'bottle caps']
-      },
-      confidence: 0.7
-    }
-  };
+  private readonly PLASTIC_CLASSES = [
+    PlasticType.PET,
+    PlasticType.HDPE,
+    PlasticType.PVC,
+    PlasticType.LDPE,
+    PlasticType.PP,
+    PlasticType.PS,
+    PlasticType.OTHER
+  ];
 
   async loadModel() {
     try {
-      this.model = await mobilenet.load({
-        version: 2,
-        alpha: 1.0
-      });
+      // Initialize TensorFlow.js
+      await tf.ready();
+      
+      // Load custom model
+      this.model = await tf.loadLayersModel(this.MODEL_URL);
+      
+      // Warm up the model
+      const dummyInput = tf.zeros([1, this.IMAGE_SIZE, this.IMAGE_SIZE, 3]);
+      await this.model.predict(dummyInput).dispose();
+      dummyInput.dispose();
+      
       return true;
     } catch (error) {
       console.error('Error loading model:', error);
@@ -74,20 +37,22 @@ class ModelService {
     }
   }
 
-  private async preprocessImage(imageElement: HTMLImageElement): Promise<tf.Tensor3D> {
+  private async preprocessImage(imageElement: HTMLImageElement): Promise<tf.Tensor4D> {
     return tf.tidy(() => {
       // Convert the image to a tensor
-      const tensor = tf.browser.fromPixels(imageElement)
+      let tensor = tf.browser.fromPixels(imageElement)
         .resizeNearestNeighbor([this.IMAGE_SIZE, this.IMAGE_SIZE])
         .toFloat();
 
       // Normalize the image
-      const offset = tf.scalar(127.5);
-      return tensor.sub(offset).div(offset);
+      tensor = tensor.div(255.0);
+      
+      // Add batch dimension
+      return tensor.expandDims(0);
     });
   }
 
-  private async analyzeImageProperties(imageElement: HTMLImageElement) {
+  private async extractImageFeatures(imageElement: HTMLImageElement) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
@@ -99,73 +64,37 @@ class ModelService {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
 
-    let transparencyCount = 0;
-    let brightnessSum = 0;
+    // Calculate image statistics
+    let transparencySum = 0;
+    let edgeCount = 0;
     let textureVariation = 0;
-    let previousBrightness = 0;
+    let previousPixel = 0;
 
-    // Analyze image properties
     for (let i = 0; i < data.length; i += 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
       const brightness = (r + g + b) / 3;
 
-      if (brightness > 240) transparencyCount++;
-      brightnessSum += brightness;
+      // Calculate transparency
+      transparencySum += brightness;
 
-      // Calculate texture variation
+      // Edge detection
       if (i > 0) {
-        textureVariation += Math.abs(brightness - previousBrightness);
+        const diff = Math.abs(brightness - previousPixel);
+        if (diff > 30) edgeCount++;
+        textureVariation += diff;
       }
-      previousBrightness = brightness;
+      previousPixel = brightness;
     }
 
-    const totalPixels = (data.length / 4);
-    const averageBrightness = brightnessSum / totalPixels;
-    const normalizedTextureVariation = textureVariation / totalPixels;
-
+    const totalPixels = data.length / 4;
+    
     return {
-      transparency: transparencyCount / totalPixels,
-      brightness: averageBrightness / 255,
-      texture: normalizedTextureVariation,
-      isTransparent: transparencyCount > (totalPixels * 0.7),
-      isOpaque: averageBrightness < 200,
-      hasTexture: normalizedTextureVariation > 0.1
+      averageTransparency: transparencySum / (totalPixels * 255),
+      edgeDensity: edgeCount / totalPixels,
+      textureComplexity: textureVariation / totalPixels
     };
-  }
-
-  private calculatePlasticTypeScore(
-    predictions: mobilenet.MobileNetPrediction[],
-    imageProperties: any,
-    plasticType: PlasticType,
-    signature: any
-  ): number {
-    let score = 0;
-
-    // Check keywords in predictions
-    for (const prediction of predictions) {
-      const matchingKeywords = signature.keywords.filter((keyword: string) =>
-        prediction.className.toLowerCase().includes(keyword.toLowerCase())
-      );
-      score += (matchingKeywords.length * prediction.probability * 0.3);
-    }
-
-    // Check visual characteristics
-    if (signature.visualCharacteristics.transparency === 'high' && imageProperties.isTransparent) {
-      score += 0.3;
-    }
-    if (signature.visualCharacteristics.transparency === 'low' && imageProperties.isOpaque) {
-      score += 0.3;
-    }
-    if (signature.visualCharacteristics.texture === 'smooth' && !imageProperties.hasTexture) {
-      score += 0.2;
-    }
-    if (signature.visualCharacteristics.texture === 'rigid' && imageProperties.hasTexture) {
-      score += 0.2;
-    }
-
-    return score * signature.confidence;
   }
 
   async classifyImage(imageElement: HTMLImageElement): Promise<{ type: PlasticType; confidence: number }> {
@@ -175,49 +104,59 @@ class ModelService {
     }
 
     try {
+      // Extract image features
+      const features = await this.extractImageFeatures(imageElement);
+      if (!features) {
+        throw new Error('Failed to extract image features');
+      }
+
       // Preprocess the image
       const tensor = await this.preprocessImage(imageElement);
-      
-      // Get image properties
-      const imageProperties = await this.analyzeImageProperties(imageElement);
-      if (!imageProperties) {
-        throw new Error('Failed to analyze image properties');
-      }
 
-      // Get predictions from MobileNet
-      const predictions = await this.model.classify(tensor, 5);
+      // Get model predictions
+      const predictions = await this.model.predict(tensor) as tf.Tensor;
+      const probabilities = await predictions.data();
 
-      // Clean up tensor
+      // Clean up tensors
       tensor.dispose();
+      predictions.dispose();
 
-      // Calculate scores for each plastic type
-      const scores = new Map<PlasticType, number>();
-      
-      for (const [plasticType, signature] of Object.entries(this.PLASTIC_SIGNATURES)) {
-        const score = this.calculatePlasticTypeScore(
-          predictions,
-          imageProperties,
-          plasticType as PlasticType,
-          signature
-        );
-        scores.set(plasticType as PlasticType, score);
-      }
+      // Find the highest probability prediction
+      let maxProbability = 0;
+      let predictedClassIndex = -1;
 
-      // Find the plastic type with the highest score
-      let highestScore = 0;
-      let bestMatch = PlasticType.UNKNOWN;
-
-      scores.forEach((score, plasticType) => {
-        if (score > highestScore && score >= this.CONFIDENCE_THRESHOLD) {
-          highestScore = score;
-          bestMatch = plasticType;
+      probabilities.forEach((probability, index) => {
+        if (probability > maxProbability) {
+          maxProbability = probability;
+          predictedClassIndex = index;
         }
       });
 
-      return {
-        type: bestMatch,
-        confidence: highestScore
-      };
+      // Apply confidence threshold and additional checks
+      if (maxProbability >= this.CONFIDENCE_THRESHOLD && predictedClassIndex !== -1) {
+        // Adjust confidence based on image features
+        let adjustedConfidence = maxProbability;
+
+        // Adjust for transparency (PET bottles are usually transparent)
+        if (this.PLASTIC_CLASSES[predictedClassIndex] === PlasticType.PET) {
+          adjustedConfidence *= features.averageTransparency > 0.7 ? 1.1 : 0.9;
+        }
+
+        // Adjust for texture complexity (HDPE usually has more texture)
+        if (this.PLASTIC_CLASSES[predictedClassIndex] === PlasticType.HDPE) {
+          adjustedConfidence *= features.textureComplexity > 0.3 ? 1.1 : 0.9;
+        }
+
+        // Ensure confidence stays within [0,1]
+        adjustedConfidence = Math.min(Math.max(adjustedConfidence, 0), 1);
+
+        return {
+          type: this.PLASTIC_CLASSES[predictedClassIndex],
+          confidence: adjustedConfidence
+        };
+      }
+
+      return { type: PlasticType.UNKNOWN, confidence: maxProbability };
     } catch (error) {
       console.error('Error classifying image:', error);
       return { type: PlasticType.UNKNOWN, confidence: 0 };
