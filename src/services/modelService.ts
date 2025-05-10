@@ -4,7 +4,7 @@ import { PlasticType } from '../types';
 class ModelService {
   private model: tf.LayersModel | null = null;
   private readonly IMAGE_SIZE = 224;
-  private readonly MODEL_URL = 'https://storage.googleapis.com/tfjs-models/plastics/model.json';
+  private readonly MODEL_URL = '/models/plastics/model.json';
   private readonly CONFIDENCE_THRESHOLD = 0.7;
 
   private readonly PLASTIC_CLASSES = [
