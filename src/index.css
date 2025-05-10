@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Aspect ratio utilities */
+.aspect-w-1 {
+  position: relative;
+  padding-bottom: calc(var(--tw-aspect-h) / var(--tw-aspect-w) * 100%);
+  --tw-aspect-w: 1;
+}
+
+.aspect-h-1 {
+  --tw-aspect-h: 1;
+}
+
+.aspect-w-16 {
+  position: relative;
+  padding-bottom: calc(var(--tw-aspect-h) / var(--tw-aspect-w) * 100%);
+  --tw-aspect-w: 16;
+}
+
+.aspect-h-9 {
+  --tw-aspect-h: 9;
+}
+
+.aspect-w-1 > *, .aspect-w-16 > * {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+/* Focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid rgb(74, 222, 128);
+  outline-offset: 2px;
+}
+
+.dark *:focus-visible {
+  outline-color: rgb(34, 197, 94);
+}
