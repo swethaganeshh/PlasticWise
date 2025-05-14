@@ -41,7 +41,8 @@ RecycleWise AI integrates a **React frontend**, a **Node.js backend**, and a **T
 It uses **Firebase** for image storage and user tracking, and the **Google Maps API** to locate recycling centers near users.
 
 ### 🔧 Architecture Diagram
-![Architecture](https://github.com/user-attachments/assets/your-architecture-image.png)
+![image](https://github.com/user-attachments/assets/301806bb-aa06-4ed5-ae14-7288f240672f)
+
 
 ---
 
