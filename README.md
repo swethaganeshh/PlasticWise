@@ -3,8 +3,10 @@
 <img width="468" alt="ps3" src="https://github.com/user-attachments/assets/5555643d-ee45-4375-a670-d2b7cf916298" />
 
 
-🌐 **Live Demo**: [Live](https://plastwise.netlify.app/)  
-📦 **Source Code**: [GitHub Repository](https://github.com/swethaganeshh/PlasticWise)
+ **Live Demo**: [Live](https://plastwise.netlify.app/)  
+**Source Code**: [GitHub Repository](https://github.com/swethaganeshh/PlasticWise)
+**Explanation video**: [Youtube-Video](https://youtu.be/MOOsl1mq4_k?si=FsTwRuDUs_c2R5Qf)
+
 
 ---
 
